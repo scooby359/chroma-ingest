@@ -22,16 +22,7 @@ npm install
 
 ## Configuration
 
-1. Copy `.env.example` to `.env`:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Add your Gemini API key to `.env`:
-   ```
-   GEMINI_API_KEY=your_actual_api_key
-   ```
+The tool uses sensible defaults configured in [src/config.ts](src/config.ts). Most use cases require no additional configuration.
 
 ## Usage
 
@@ -76,10 +67,12 @@ Edit [src/index.ts](src/index.ts) or create your own script based on [src/exampl
 const config: IngestConfig = {
   sourceFolder: './sources', // Path to markdown files
   chromaUrl: 'http://localhost:8000', // ChromaDB URL
-  collectionName: 'markdown_docs', // Collection name
-  geminiApiKey: apiKey,
-  chunkSize: 1000, // Characters per chunk
-  chunkOverlap: 200, // Overlap between chunks
+  collectionName: 'ExchangeResearch', // Collection name
+  embeddingUrl: 'http://localhost:12434/engines/llama.cpp/v1/embeddings', // Local embedding server
+  embeddingModel: 'ai/embeddinggemma', // Local embedding model
+  chunkSize: 600, // Characters per chunk
+  chunkOverlap: 150, // Overlap between chunks
+  batchSize: 50, // Number of chunks to process at once (for memory efficiency)
   stateFile: '.ingest-state.json', // State tracking file
 };
 ```
