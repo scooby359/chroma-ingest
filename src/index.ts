@@ -7,6 +7,8 @@ import {
   saveState,
   getChangedFiles,
   updateState,
+  deleteImportedFile,
+  removeUnchangedImportedFiles,
 } from './changeTracking.js';
 import type { Chunk } from './chunking.js';
 import { countMarkdownChunks, chunkMarkdownGenerator } from './chunking.js';
@@ -32,6 +34,8 @@ export async function ingestMarkdownFiles(config: IngestConfig): Promise<void> {
   const embeddingGenerator = new EmbeddingGenerator(
     fullConfig.embeddingUrl,
     fullConfig.embeddingModel,
+    fullConfig.embeddingDelayMs,
+    fullConfig.embeddingMaxRetries,
   );
   const chromaManager = new ChromaDBManager(
     fullConfig.chromaUrl,
@@ -50,6 +54,13 @@ export async function ingestMarkdownFiles(config: IngestConfig): Promise<void> {
   // Load state and filter changed files
   let state = await loadState(fullConfig.stateFile!);
   const changedFiles = getChangedFiles(allFiles, state);
+
+  // Remove files that are already imported with no changes
+  console.log('\nChecking for unchanged imported files...');
+  const removedCount = await removeUnchangedImportedFiles(allFiles, state);
+  if (removedCount > 0) {
+    console.log(`Cleaned up ${removedCount} unchanged imported files`);
+  }
 
   if (changedFiles.length === 0) {
     console.log('No changed files to process');
@@ -152,6 +163,9 @@ export async function ingestMarkdownFiles(config: IngestConfig): Promise<void> {
       }
 
       console.log(`  ✓ Successfully processed ${file.relativePath}`);
+
+      // Delete file after successful import
+      await deleteImportedFile(file.path);
 
       // Update and save state immediately after successful processing
       state = updateState(state, [file]);

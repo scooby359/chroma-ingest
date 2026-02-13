@@ -15,13 +15,26 @@ interface EmbeddingResponse {
 export class EmbeddingGenerator {
   private readonly embeddingUrl: string;
   private readonly model: string;
+  private readonly delayMs: number;
+  private readonly maxRetries: number;
 
   constructor(
     embeddingUrl: string = 'http://localhost:12434/engines/llama.cpp/v1/embeddings',
     model: string = 'ai/embeddinggemma',
+    delayMs: number = 500,
+    maxRetries: number = 3,
   ) {
     this.embeddingUrl = embeddingUrl;
     this.model = model;
+    this.delayMs = delayMs;
+    this.maxRetries = maxRetries;
+  }
+
+  /**
+   * Delay execution for a specified number of milliseconds
+   */
+  private async delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
@@ -34,7 +47,7 @@ export class EmbeddingGenerator {
     for (let i = 0; i < texts.length; i += 1) {
       const text = texts[i];
       if (!text) continue;
-      
+
       try {
         const embedding = await this.generateSingle(text);
         embeddings.push(embedding);
@@ -42,10 +55,13 @@ export class EmbeddingGenerator {
         console.error(
           `    ✗ Failed to generate embedding for chunk ${i + 1}/${texts.length}`,
         );
-        console.error(
-          `      Text preview: ${text.substring(0, 100)}...`,
-        );
+        console.error(`      Text preview: ${text.substring(0, 100)}...`);
         throw error;
+      }
+
+      // Add delay between requests to avoid overwhelming the endpoint
+      if (i < texts.length - 1) {
+        await this.delay(this.delayMs);
       }
 
       // Log progress
@@ -60,9 +76,35 @@ export class EmbeddingGenerator {
   }
 
   /**
-   * Generate embedding for a single text
+   * Generate embedding for a single text with retry logic
    */
   private async generateSingle(text: string): Promise<number[]> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        return await this.fetchEmbedding(text);
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+
+        if (attempt < this.maxRetries) {
+          // Exponential backoff: 1s, 2s, 4s
+          const backoffMs = Math.pow(2, attempt - 1) * 1000;
+          console.warn(
+            `    ⚠ Embedding request failed (attempt ${attempt}/${this.maxRetries}), retrying in ${backoffMs}ms...`,
+          );
+          await this.delay(backoffMs);
+        }
+      }
+    }
+
+    throw lastError || new Error('Failed to generate embedding after retries');
+  }
+
+  /**
+   * Fetch embedding from the API
+   */
+  private async fetchEmbedding(text: string): Promise<number[]> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 

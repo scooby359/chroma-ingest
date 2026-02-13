@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import type { FileInfo } from './fileDiscovery.js';
 
@@ -63,4 +63,50 @@ export function updateState(
   }
 
   return newState;
+}
+
+/**
+ * Delete a file from the sources folder after successful import
+ */
+export async function deleteImportedFile(filePath: string): Promise<void> {
+  try {
+    await rm(filePath, { force: true });
+    console.log(`    Cleaned up: removed ${filePath}`);
+  } catch (error) {
+    console.warn(
+      `    ⚠ Failed to delete file ${filePath}: ${error instanceof Error ? error.message : error}`,
+    );
+  }
+}
+
+/**
+ * Remove files that have already been imported and have no changes
+ * Returns the number of files removed
+ */
+export async function removeUnchangedImportedFiles(
+  files: FileInfo[],
+  state: IngestState,
+): Promise<number> {
+  let removedCount = 0;
+
+  for (const file of files) {
+    const lastIngestedHash = state.files[file.relativePath];
+
+    // File is in state and has the same hash (no changes)
+    if (lastIngestedHash && file.contentHash === lastIngestedHash) {
+      try {
+        await rm(file.path, { force: true });
+        console.log(
+          `  Removed: ${file.relativePath} (already imported, no changes)`,
+        );
+        removedCount++;
+      } catch (error) {
+        console.warn(
+          `  ⚠ Failed to remove ${file.relativePath}: ${error instanceof Error ? error.message : error}`,
+        );
+      }
+    }
+  }
+
+  return removedCount;
 }

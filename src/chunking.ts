@@ -15,25 +15,45 @@ function getChunkEnd(
   start: number,
   chunkSize: number,
 ): number {
-  let end = start + chunkSize;
+  let end = Math.min(start + chunkSize, cleanContent.length);
 
-  if (end < cleanContent.length) {
-    const paragraphBreak = cleanContent.lastIndexOf('\n\n', end);
-    if (paragraphBreak > start + chunkSize / 2) {
-      end = paragraphBreak + 2;
+  // Early exit if we're at or near the end
+  if (end === cleanContent.length) {
+    return end;
+  }
+
+  const minBreakPoint = start + Math.ceil(chunkSize / 2);
+  let breakType = 'fallback';
+
+  // Try paragraph break (most natural boundary)
+  let paragraphBreak = cleanContent.lastIndexOf('\n\n', end);
+  if (paragraphBreak > minBreakPoint) {
+    end = paragraphBreak + 2;
+    breakType = 'paragraph';
+  } else {
+    // Try sentence break
+    let sentenceBreak = cleanContent.lastIndexOf('. ', end);
+    if (sentenceBreak > minBreakPoint) {
+      end = sentenceBreak + 2;
+      breakType = 'sentence';
     } else {
-      const sentenceBreak = cleanContent.lastIndexOf('. ', end);
-      if (sentenceBreak > start + chunkSize / 2) {
-        end = sentenceBreak + 2;
+      // Try line break (important for URL-heavy content)
+      let lineBreak = cleanContent.lastIndexOf('\n', end);
+      if (lineBreak > minBreakPoint) {
+        end = lineBreak + 1;
+        breakType = 'line';
       } else {
-        const wordBreak = cleanContent.lastIndexOf(' ', end);
-        if (wordBreak > start) {
+        // Try word boundary
+        let wordBreak = cleanContent.lastIndexOf(' ', end);
+        if (wordBreak > minBreakPoint) {
           end = wordBreak + 1;
+          breakType = 'word';
         }
       }
     }
   }
 
+  // Fallback: if no good break point found, just split at chunkSize
   return end;
 }
 
@@ -50,16 +70,36 @@ export function countMarkdownChunks(
 
   let start = 0;
   let count = 0;
+  let iterations = 0;
+  const maxIterations =
+    cleanContent.length / Math.max(chunkSize - overlap, 1) + 100; // Safety limit
 
-  while (start < cleanContent.length) {
+  while (start < cleanContent.length && iterations < maxIterations) {
     const end = getChunkEnd(cleanContent, start, chunkSize);
     const chunkContent = cleanContent.substring(start, end).trim();
+
     if (chunkContent.length > 0) {
       count += 1;
     }
-    start = end - overlap;
+
+    // Ensure we always make forward progress
+    const nextStart = Math.max(start + 1, end - overlap);
+    if (nextStart === start) {
+      // Prevent infinite loop: if we're not making progress, jump to end
+      break;
+    }
+
+    start = nextStart;
+    iterations += 1;
+
     if (start >= cleanContent.length) break;
   }
+
+  // if (iterations >= maxIterations) {
+    // console.warn(
+    //   `  ⚠ countMarkdownChunks: Hit iteration limit at chunk ${count}. Content length: ${cleanContent.length}, iterations: ${iterations}/${maxIterations}`,
+    // );
+  // }
 
   return count;
 }
@@ -77,11 +117,15 @@ export function* chunkMarkdownGenerator(
   const cleanContent = content.trim();
   if (cleanContent.length === 0) return;
 
-  const resolvedTotal = totalChunks ?? countMarkdownChunks(content, chunkSize, overlap);
+  const resolvedTotal =
+    totalChunks ?? countMarkdownChunks(content, chunkSize, overlap);
   let start = 0;
   let chunkIndex = 0;
+  let iterations = 0;
+  const maxIterations =
+    cleanContent.length / Math.max(chunkSize - overlap, 1) + 100; // Safety limit
 
-  while (start < cleanContent.length) {
+  while (start < cleanContent.length && iterations < maxIterations) {
     const end = getChunkEnd(cleanContent, start, chunkSize);
     const chunkContent = cleanContent.substring(start, end).trim();
 
@@ -97,7 +141,22 @@ export function* chunkMarkdownGenerator(
       chunkIndex += 1;
     }
 
-    start = end - overlap;
+    // Ensure we always make forward progress
+    const nextStart = Math.max(start + 1, end - overlap);
+    if (nextStart === start) {
+      // Prevent infinite loop: if we're not making progress, jump to end
+      break;
+    }
+
+    start = nextStart;
+    iterations += 1;
+
     if (start >= cleanContent.length) break;
   }
+
+  // if (iterations >= maxIterations) {
+  //   console.warn(
+  //     `  ⚠ chunkMarkdownGenerator: Hit iteration limit at chunk ${chunkIndex}. Content length: ${cleanContent.length}`,
+  //   );
+  // }
 }
