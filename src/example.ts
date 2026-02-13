@@ -17,11 +17,11 @@ const config: IngestConfig = {
   embeddingModel: 'ai/embeddinggemma',
 
   // Chunking settings
-  chunkSize: 600, // Characters per chunk
-  chunkOverlap: 150, // Overlap between chunks
+  chunkSize: 400, // Characters per chunk
+  chunkOverlap: 100, // Overlap between chunks
 
   // Batch processing for memory efficiency
-  batchSize: 50, // Process 50 chunks at a time
+  batchSize: 20, // Process 20 chunks at a time
 
   // State file for tracking changes
   stateFile: '.ingest-state.json',

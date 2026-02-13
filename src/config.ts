@@ -26,8 +26,8 @@ export const defaultConfig: Partial<IngestConfig> = {
   collectionName: 'ExchangeResearch',
   embeddingUrl: 'http://127.0.0.1:12434/engines/llama.cpp/v1/embeddings',
   embeddingModel: 'ai/embeddinggemma',
-  chunkSize: 600,
-  chunkOverlap: 150,
-  batchSize: 50, // Process 50 chunks at a time to manage memory
+  chunkSize: 400,
+  chunkOverlap: 100,
+  batchSize: 20, // Process 20 chunks at a time to manage memory
   stateFile: '.ingest-state.json',
 };

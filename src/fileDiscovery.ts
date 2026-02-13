@@ -1,5 +1,5 @@
 import { glob, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 
 export interface FileInfo {
@@ -26,10 +26,8 @@ export async function discoverMarkdownFiles(
 
   // Collect all files from the async iterator
   for await (const filePath of glob(pattern)) {
-    // Normalize path separators to forward slashes for consistency across platforms
-    const relativePath = filePath
-      .substring(sourceFolder.length + 1)
-      .replaceAll('\\', '/');
+    // Use path.relative to properly compute relative path regardless of whether sourceFolder is relative or absolute
+    const relativePath = relative(sourceFolder, filePath).replaceAll('\\', '/');
     const content = await readFile(filePath, 'utf-8');
     const contentHash = hashContent(content);
 
