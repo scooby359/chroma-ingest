@@ -8,7 +8,8 @@ import {
   getChangedFiles,
   updateState,
 } from './changeTracking.js';
-import { chunkMarkdown } from './chunking.js';
+import type { Chunk } from './chunking.js';
+import { countMarkdownChunks, chunkMarkdownGenerator } from './chunking.js';
 import { EmbeddingGenerator } from './embeddings.js';
 import { ChromaDBManager } from './chromadb.js';
 
@@ -66,36 +67,88 @@ export async function ingestMarkdownFiles(config: IngestConfig): Promise<void> {
       const content = await readFile(file.path, 'utf-8');
 
       // Chunk the content
-      const chunks = chunkMarkdown(
+      const totalChunks = countMarkdownChunks(
         content,
-        file.relativePath,
         fullConfig.chunkSize,
         fullConfig.chunkOverlap,
       );
 
-      if (chunks.length === 0) {
+      if (totalChunks === 0) {
         console.log('  File is empty, skipping');
         continue;
       }
 
-      console.log(`  Created ${chunks.length} chunks`);
+      console.log(`  Created ${totalChunks} chunks`);
 
       // Process chunks in batches to manage memory
       const batchSize = fullConfig.batchSize || 50;
-      for (let i = 0; i < chunks.length; i += batchSize) {
-        const batchChunks = chunks.slice(i, i + batchSize);
+      const batchChunks: Chunk[] = [];
+      let batchIndex = 0;
+
+      for (const chunk of chunkMarkdownGenerator(
+        content,
+        file.relativePath,
+        fullConfig.chunkSize,
+        fullConfig.chunkOverlap,
+        totalChunks,
+      )) {
+        batchChunks.push(chunk);
+
+        if (batchChunks.length >= batchSize) {
+          batchIndex += 1;
+          const chunkContents = batchChunks.map((c) => c.content);
+
+          console.log(
+            `  Generating embeddings for batch ${batchIndex}/${Math.ceil(totalChunks / batchSize)}...`,
+          );
+          try {
+            const embeddings =
+              await embeddingGenerator.generateEmbeddings(chunkContents);
+
+            console.log('  Inserting batch into ChromaDB...');
+            await chromaManager.insertChunks(
+              collection,
+              batchChunks,
+              embeddings,
+            );
+          } catch (error) {
+            console.error(
+              `  ✗ Batch ${batchIndex} failed with error:`,
+              error instanceof Error ? error.message : error,
+            );
+            console.error(
+              `    First chunk preview: ${batchChunks[0]?.content.substring(0, 150)}...`,
+            );
+            throw error;
+          }
+          batchChunks.length = 0;
+        }
+      }
+
+      if (batchChunks.length > 0) {
+        batchIndex += 1;
         const chunkContents = batchChunks.map((c) => c.content);
 
-        // Generate embeddings for this batch
         console.log(
-          `  Generating embeddings for batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(chunks.length / batchSize)}...`,
+          `  Generating embeddings for batch ${batchIndex}/${Math.ceil(totalChunks / batchSize)}...`,
         );
-        const embeddings =
-          await embeddingGenerator.generateEmbeddings(chunkContents);
+        try {
+          const embeddings =
+            await embeddingGenerator.generateEmbeddings(chunkContents);
 
-        // Insert batch into ChromaDB
-        console.log('  Inserting batch into ChromaDB...');
-        await chromaManager.insertChunks(collection, batchChunks, embeddings);
+          console.log('  Inserting batch into ChromaDB...');
+          await chromaManager.insertChunks(collection, batchChunks, embeddings);
+        } catch (error) {
+          console.error(
+            `  ✗ Final batch failed with error:`,
+            error instanceof Error ? error.message : error,
+          );
+          console.error(
+            `    First chunk preview: ${batchChunks[0]?.content.substring(0, 150)}...`,
+          );
+          throw error;
+        }
+        batchChunks.length = 0;
       }
 
       console.log(`  ✓ Successfully processed ${file.relativePath}`);

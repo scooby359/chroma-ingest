@@ -70,9 +70,9 @@ const config: IngestConfig = {
   collectionName: 'ExchangeResearch', // Collection name
   embeddingUrl: 'http://localhost:12434/engines/llama.cpp/v1/embeddings', // Local embedding server
   embeddingModel: 'ai/embeddinggemma', // Local embedding model
-  chunkSize: 400, // Characters per chunk
-  chunkOverlap: 100, // Overlap between chunks
-  batchSize: 20, // Number of chunks to process at once (for memory efficiency)
+  chunkSize: 600, // Characters per chunk
+  chunkOverlap: 150, // Overlap between chunks
+  batchSize: 50, // Number of chunks to process at once (for memory efficiency)
   stateFile: '.ingest-state.json', // State tracking file
 };
 ```
