@@ -47,7 +47,7 @@ export async function ingestMarkdownFiles(config: IngestConfig): Promise<void> {
   console.log(`Found ${allFiles.length} markdown files`);
 
   // Load state and filter changed files
-  const state = await loadState(fullConfig.stateFile!);
+  let state = await loadState(fullConfig.stateFile!);
   const changedFiles = getChangedFiles(allFiles, state);
 
   if (changedFiles.length === 0) {
@@ -96,21 +96,18 @@ export async function ingestMarkdownFiles(config: IngestConfig): Promise<void> {
         // Insert batch into ChromaDB
         console.log('  Inserting batch into ChromaDB...');
         await chromaManager.insertChunks(collection, batchChunks, embeddings);
-
-        // Help garbage collection by clearing references
-        (batchChunks as any) = null;
-        (embeddings as any) = null;
       }
 
       console.log(`  ✓ Successfully processed ${file.relativePath}`);
+
+      // Update and save state immediately after successful processing
+      state = updateState(state, [file]);
+      await saveState(fullConfig.stateFile as string, state);
     } catch (error) {
       console.error(`  ✗ Failed to process ${file.relativePath}:`, error);
+      // State is not updated for failed files
     }
   }
-
-  // Update and save state
-  const newState = updateState(state, changedFiles);
-  await saveState(fullConfig.stateFile as string, newState);
 
   console.log('\n✓ Ingestion complete!');
 }
