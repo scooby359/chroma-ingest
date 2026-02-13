@@ -32,7 +32,7 @@ async function inspectChromaDB() {
 
       // Get all documents (with a reasonable limit)
       const results = await collection.get({
-        limit: 1000,
+        limit: 100000,
       });
 
       const totalChunks = results.ids.length;
