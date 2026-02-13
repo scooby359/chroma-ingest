@@ -19,6 +19,40 @@ import { ChromaDBManager } from './chromadb.js';
 loadEnv();
 
 /**
+ * Process a batch of chunks by generating embeddings and inserting into ChromaDB
+ */
+async function processBatch(
+  batchIndex: number,
+  totalBatches: number,
+  batchChunks: Chunk[],
+  embeddingGenerator: EmbeddingGenerator,
+  chromaManager: ChromaDBManager,
+  collection: any,
+): Promise<void> {
+  const chunkContents = batchChunks.map((c) => c.content);
+
+  console.log(
+    `  Generating embeddings for batch ${batchIndex}/${totalBatches}...`,
+  );
+  try {
+    const embeddings =
+      await embeddingGenerator.generateEmbeddings(chunkContents);
+
+    console.log('  Inserting batch into ChromaDB...');
+    await chromaManager.insertChunks(collection, batchChunks, embeddings);
+  } catch (error) {
+    console.error(
+      `  ✗ Batch ${batchIndex} failed with error:`,
+      error instanceof Error ? error.message : error,
+    );
+    console.error(
+      `    First chunk preview: ${batchChunks[0]?.content.substring(0, 150)}...`,
+    );
+    throw error;
+  }
+}
+
+/**
  * Main ingestion function
  */
 export async function ingestMarkdownFiles(config: IngestConfig): Promise<void> {
@@ -93,6 +127,7 @@ export async function ingestMarkdownFiles(config: IngestConfig): Promise<void> {
 
       // Process chunks in batches to manage memory
       const batchSize = fullConfig.batchSize || 50;
+      const totalBatches = Math.ceil(totalChunks / batchSize);
       const batchChunks: Chunk[] = [];
       let batchIndex = 0;
 
@@ -107,59 +142,28 @@ export async function ingestMarkdownFiles(config: IngestConfig): Promise<void> {
 
         if (batchChunks.length >= batchSize) {
           batchIndex += 1;
-          const chunkContents = batchChunks.map((c) => c.content);
-
-          console.log(
-            `  Generating embeddings for batch ${batchIndex}/${Math.ceil(totalChunks / batchSize)}...`,
+          await processBatch(
+            batchIndex,
+            totalBatches,
+            batchChunks,
+            embeddingGenerator,
+            chromaManager,
+            collection,
           );
-          try {
-            const embeddings =
-              await embeddingGenerator.generateEmbeddings(chunkContents);
-
-            console.log('  Inserting batch into ChromaDB...');
-            await chromaManager.insertChunks(
-              collection,
-              batchChunks,
-              embeddings,
-            );
-          } catch (error) {
-            console.error(
-              `  ✗ Batch ${batchIndex} failed with error:`,
-              error instanceof Error ? error.message : error,
-            );
-            console.error(
-              `    First chunk preview: ${batchChunks[0]?.content.substring(0, 150)}...`,
-            );
-            throw error;
-          }
           batchChunks.length = 0;
         }
       }
 
       if (batchChunks.length > 0) {
         batchIndex += 1;
-        const chunkContents = batchChunks.map((c) => c.content);
-
-        console.log(
-          `  Generating embeddings for batch ${batchIndex}/${Math.ceil(totalChunks / batchSize)}...`,
+        await processBatch(
+          batchIndex,
+          totalBatches,
+          batchChunks,
+          embeddingGenerator,
+          chromaManager,
+          collection,
         );
-        try {
-          const embeddings =
-            await embeddingGenerator.generateEmbeddings(chunkContents);
-
-          console.log('  Inserting batch into ChromaDB...');
-          await chromaManager.insertChunks(collection, batchChunks, embeddings);
-        } catch (error) {
-          console.error(
-            `  ✗ Final batch failed with error:`,
-            error instanceof Error ? error.message : error,
-          );
-          console.error(
-            `    First chunk preview: ${batchChunks[0]?.content.substring(0, 150)}...`,
-          );
-          throw error;
-        }
-        batchChunks.length = 0;
       }
 
       console.log(`  ✓ Successfully processed ${file.relativePath}`);

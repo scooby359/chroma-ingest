@@ -23,31 +23,26 @@ function getChunkEnd(
   }
 
   const minBreakPoint = start + Math.ceil(chunkSize / 2);
-  let breakType = 'fallback';
 
   // Try paragraph break (most natural boundary)
   let paragraphBreak = cleanContent.lastIndexOf('\n\n', end);
   if (paragraphBreak > minBreakPoint) {
     end = paragraphBreak + 2;
-    breakType = 'paragraph';
   } else {
     // Try sentence break
     let sentenceBreak = cleanContent.lastIndexOf('. ', end);
     if (sentenceBreak > minBreakPoint) {
       end = sentenceBreak + 2;
-      breakType = 'sentence';
     } else {
       // Try line break (important for URL-heavy content)
       let lineBreak = cleanContent.lastIndexOf('\n', end);
       if (lineBreak > minBreakPoint) {
         end = lineBreak + 1;
-        breakType = 'line';
       } else {
         // Try word boundary
         let wordBreak = cleanContent.lastIndexOf(' ', end);
         if (wordBreak > minBreakPoint) {
           end = wordBreak + 1;
-          breakType = 'word';
         }
       }
     }
@@ -94,12 +89,6 @@ export function countMarkdownChunks(
 
     if (start >= cleanContent.length) break;
   }
-
-  // if (iterations >= maxIterations) {
-    // console.warn(
-    //   `  ⚠ countMarkdownChunks: Hit iteration limit at chunk ${count}. Content length: ${cleanContent.length}, iterations: ${iterations}/${maxIterations}`,
-    // );
-  // }
 
   return count;
 }
@@ -153,10 +142,4 @@ export function* chunkMarkdownGenerator(
 
     if (start >= cleanContent.length) break;
   }
-
-  // if (iterations >= maxIterations) {
-  //   console.warn(
-  //     `  ⚠ chunkMarkdownGenerator: Hit iteration limit at chunk ${chunkIndex}. Content length: ${cleanContent.length}`,
-  //   );
-  // }
 }

@@ -56,32 +56,47 @@ export function updateState(
   state: IngestState,
   files: FileInfo[],
 ): IngestState {
-  const newState = { ...state };
+  return {
+    files: {
+      ...state.files,
+      ...Object.fromEntries(files.map((f) => [f.relativePath, f.contentHash])),
+    },
+  };
+}
 
-  for (const file of files) {
-    newState.files[file.relativePath] = file.contentHash;
+/**
+ * Delete a file with error handling
+ */
+async function deleteFile(
+  filePath: string,
+  message: string,
+  errorPrefix: string,
+): Promise<boolean> {
+  try {
+    await rm(filePath, { force: true });
+    console.log(message);
+    return true;
+  } catch (error) {
+    console.warn(
+      `${errorPrefix}: ${error instanceof Error ? error.message : error}`,
+    );
+    return false;
   }
-
-  return newState;
 }
 
 /**
  * Delete a file from the sources folder after successful import
  */
 export async function deleteImportedFile(filePath: string): Promise<void> {
-  try {
-    await rm(filePath, { force: true });
-    console.log(`    Cleaned up: removed ${filePath}`);
-  } catch (error) {
-    console.warn(
-      `    ⚠ Failed to delete file ${filePath}: ${error instanceof Error ? error.message : error}`,
-    );
-  }
+  await deleteFile(
+    filePath,
+    `    Cleaned up: removed ${filePath}`,
+    `    ⚠ Failed to delete file ${filePath}`,
+  );
 }
 
 /**
  * Remove files that have already been imported and have no changes
- * Returns the number of files removed
  */
 export async function removeUnchangedImportedFiles(
   files: FileInfo[],
@@ -94,17 +109,12 @@ export async function removeUnchangedImportedFiles(
 
     // File is in state and has the same hash (no changes)
     if (lastIngestedHash && file.contentHash === lastIngestedHash) {
-      try {
-        await rm(file.path, { force: true });
-        console.log(
-          `  Removed: ${file.relativePath} (already imported, no changes)`,
-        );
-        removedCount++;
-      } catch (error) {
-        console.warn(
-          `  ⚠ Failed to remove ${file.relativePath}: ${error instanceof Error ? error.message : error}`,
-        );
-      }
+      const removed = await deleteFile(
+        file.path,
+        `  Removed: ${file.relativePath} (already imported, no changes)`,
+        `  ⚠ Failed to remove ${file.relativePath}`,
+      );
+      if (removed) removedCount++;
     }
   }
 
